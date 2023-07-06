@@ -53,7 +53,7 @@ def unstrip_debs(binary: Path, dbgsym: Path, output_dir: str) -> None:
     rmtree(temp_path)
 
 
-def download_pkg(name: str) -> tuple[Path, Path]:
+def download_pkg(name: str):
     # this only works if local system is target OS :/
     # run(["apt-get", "download", name], check=True)
     # run(["apt-get", "download", name + "-dbg"], check=True)
@@ -66,17 +66,18 @@ def download_pkg(name: str) -> tuple[Path, Path]:
     url_dir = repo_url + basename[0] + "/" + basename + "/"
     name_comp[0] += "-dbg"
     dbg_name = "_".join(name_comp)
-    
+    normal_path = Path("../../data") / name
+    dbg_path = Path("../../data") / dbg_name
     # print(f"downloading from: {url_dir + name}")
     # if the base package download fails, it's probably due to the string hackery above
-    request.urlretrieve(url_dir + name, filename=name)
+    request.urlretrieve(url_dir + name, filename=normal_path)
     try:
-        request.urlretrieve(url_dir + dbg_name, filename=dbg_name)
+        request.urlretrieve(url_dir + dbg_name, filename=dbg_path)
     except error.HTTPError:
         print(f"Debugging symbols not found, exiting. ({dbg_name})")
         _exit(1)
 
-    return(Path(name), Path(dbg_name))
+    return(normal_path, dbg_path)
 
 
 def create_sample_structure(input_folder_path: str, output_folder_path: str) -> None:
@@ -103,6 +104,7 @@ def create_sample_structure(input_folder_path: str, output_folder_path: str) -> 
         for binary in os.listdir(os.path.join(output_folder_path, "original")):
             binary_path = os.path.join(output_folder_path, 'original', binary)
             os.system(f"mv {binary_path} {binary_path}_original")
+
 
 
 def main() -> None:
