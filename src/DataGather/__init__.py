@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from shutil import unpack_archive, rmtree
 from subprocess import run
 from pathlib import Path
-from os import mkdir, _exit
+from os import mkdir
 from urllib import request, error
 
 
@@ -59,23 +59,35 @@ def download_pkg(name: str):
     # run(["apt-get", "download", name + "-dbg"], check=True)
 
     # super quick and dirty apt download ^^
-    repo_url = "http://ftp.de.debian.org/debian/pool/main/"
+    repo_urls = ["http://ftp.de.debian.org/debian/pool/main/"]
+    repo_urls.append(f"http://security.ubuntu.com/ubuntu/pool/main/{name[0]}/")
+
+
     name_comp = name.split("_")
     basename = name_comp[0].split("-")[0].removeprefix("lib")
-    
-    url_dir = repo_url + basename[0] + "/" + basename + "/"
-    name_comp[0] += "-dbg"
+    name_dbg= name_comp[0] + "-dbg"
     dbg_name = "_".join(name_comp)
     normal_path = Path("../../data") / name
     dbg_path = Path("../../data") / dbg_name
-    # print(f"downloading from: {url_dir + name}")
-    # if the base package download fails, it's probably due to the string hackery above
-    request.urlretrieve(url_dir + name, filename=normal_path)
-    try:
-        request.urlretrieve(url_dir + dbg_name, filename=dbg_path)
-    except error.HTTPError:
-        print(f"Debugging symbols not found, exiting. ({dbg_name})")
-        _exit(1)
+
+    for repo_url in repo_urls:
+        try:
+            url_dir = repo_url + basename[0] + "/" + basename + "/"
+
+            # print(f"downloading from: {url_dir + name}")
+            # if the base package download fails, it's probably due to the string hackery above
+            request.urlretrieve(url_dir + name, filename=normal_path)
+            try:
+                request.urlretrieve(url_dir + dbg_name, filename=dbg_path)
+                break
+            except error.HTTPError:
+                print(f"Debugging symbols not found for {name}, skipping.")
+                continue
+        except Exception as e:
+            print(e)
+            print(f"Failed to download {name}, skipping.")
+            continue
+
 
     return(normal_path, dbg_path)
 
@@ -84,9 +96,13 @@ def create_sample_structure(input_folder_path: str, output_folder_path: str) -> 
 
     if not os.path.exists(output_folder_path):
         os.mkdir(output_folder_path)
+    if not os.path.exists(os.path.join(output_folder_path, "stripped")):
         os.mkdir(os.path.join(output_folder_path, "stripped"))
+    if not os.path.exists(os.path.join(output_folder_path, "original")):
         os.mkdir(os.path.join(output_folder_path, "original"))
+    if not os.path.exists(os.path.join(output_folder_path, "no_propagation")):
         os.mkdir(os.path.join(output_folder_path, "no_propagation"))
+    if True:
         os.system(f"cp {input_folder_path}/* {output_folder_path}/original")
         os.system(f"cp {input_folder_path}/* {output_folder_path}/stripped")
         os.system(f"cp {input_folder_path}/* {output_folder_path}/no_propagation")
@@ -106,6 +122,18 @@ def create_sample_structure(input_folder_path: str, output_folder_path: str) -> 
             os.system(f"mv {binary_path} {binary_path}_original")
 
 
+def run_for_packages(packages: list, output_folder_path: str):
+    for package in packages:
+        name_comp = package.split("_")[0]
+        print(f"Downloading {name_comp}")
+        try:
+            binary, dbgsym = download_pkg(package)
+            output_folder_path = os.path.join(output_folder_path, name_comp)
+            unstrip_debs(binary, dbgsym, output_folder_path)
+        except Exception as e:
+            print(e)
+            print(f"Failed to download {package}, skipping.")
+            continue
 
 def main() -> None:
     parser = ArgumentParser(description=
